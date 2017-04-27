@@ -72,6 +72,15 @@ ASSIGN
 
  
  /* triggers */
+
+btn_root:PRIVATE-DATA =  STRING(0) + ",".
+ON CHOOSE OF btn_root IN FRAME kat PERSISTENT RUN show_sub_classf IN THIS-PROCEDURE.
+              
+
+btn_root_text:PRIVATE-DATA = STRING(0).
+ON CHOOSE OF btn_root_text IN  FRAME kat PERSISTENT RUN show_katalog IN THIS-PROCEDURE.
+            
+
 ON START-SEARCH OF b_katalog DO:
     /* сортировка при клике на колонке BROWSE */
     DEFINE VARIABLE h_col  AS WIDGET-HANDLE.
@@ -115,9 +124,9 @@ ON START-SEARCH OF b_katalog DO:
 END.
 
   
-DEFINE VARIABLE tmp AS INTEGER.
-RUN show_childs(0, FRAME kat:HANDLE,OUTPUT tmp). 
+
 VIEW FRAME MAIN.
+
     
 ENABLE ALL WITH FRAME kat.
 ENABLE ALL WITH FRAME main.
@@ -148,10 +157,12 @@ PROCEDURE get_katalog_by_classf_list.
     FOR EACH katalog_of_classf:
         DELETE katalog_of_classf.
         END.
-     MESSAGE list.
+  
     DO i = 1 TO NUM-ENTRIES(list):
+       IF  i = 0 OR i > 6 THEN RETURN.
+
        id_ = INTEGER( ENTRY( i, list )).
-       MESSAGE id_.
+    
 
        FOR EACH cl-good WHERE  cl-good.id = id_,
             EACH katalog OF cl-good:
@@ -202,66 +213,120 @@ PROCEDURE show_sub_classf.
    если label кнопки "+": скрывает дочернй фрейм 
    если label кнопки "":не делает ничего 
 */   
-    DEFINE VARIABLE hParent AS WIDGET-HANDLE.
-    DEFINE VARIABLE hFrame AS WIDGET-HANDLE.
+   
+ 
     DEFINE VARIABLE hChild AS WIDGET-HANDLE.
     DEFINE VARIABLE shift AS INTEGER.
     DEFINE VARIABLE classf_id AS INTEGER.
  
-    hParent = SELF:FRAME.
-    classf_id = integer(entry(1,SELF:PRIVATE-DATA)).
+    
+    
     hChild = WIDGET-HANDLE( entry(2,SELF:PRIVATE-DATA)).
 
     CASE SELF:LABEL :
         WHEN "+"  THEN DO:
-        IF VALID-HANDLE(hChild) THEN DO: 
-            hFrame = hChild.
-            shift = hChild:HEIGHT.
-            END.
-        ELSE DO:
-            CREATE FRAME hFrame ASSIGN
-                FRAME = SELF:FRAME
-                OVERLAY =TRUE
-                HIDDEN = TRUE
-                /* BOX = FALSE */
-                SCROLLABLE = FALSE
-                COL = {&w_kat_in}.
 
-            hFrame:WIDTH = hParent:WIDTH - hFrame:COL.
-            hFrame:ROW = self:ROW + {&w_kat_in}.
-
-            RUN show_childs(classf_id, hFrame, OUTPUT shift).
-            END.
-    
-        IF shift > 1 THEN DO:
-            SELF:PRIVATE-DATA = STRING(classf_id) + "," + STRING(hFrame).
-            SELF:LABEL = "-". 
-           
-            RUN resize_frame(SELF:FRAME, SELF:ROW, shift).
+            IF VALID-HANDLE(hChild) THEN shift = hChild:HEIGHT.
+            ELSE RUN show_childs(OUTPUT hChild,  OUTPUT shift).
+          
+            IF shift > 1 THEN DO:
+                SELF:LABEL = "-". 
+               
+                RUN resize_frame(SELF:FRAME, SELF:ROW, shift).
+                 
+               
+                hChild:ROW = SELF:ROW + 1.
              
-            hFrame:HEIGHT = shift.
-            hFrame:ROW = SELF:ROW + 1.
-           
-            VIEW hFrame.
-            END.
-        ELSE DO:
-            SELF:PRIVATE-DATA = STRING(classf_id) + "," + STRING(0).
-            SELF:LABEL = "".
-            DELETE WIDGET hFrame.
-            END.    
+                 
+                VIEW hChild.
+
+                END.
+            ELSE SELF:LABEL = "".
         END.
-    WHEN "-" THEN DO:
-        SELF:LABEL = "+".  
-        
-        IF VALID-HANDLE(hChild) THEN DO:
-            hChild:HIDDEN = TRUE.
-            shift = - hChild:HEIGHT.
+
+        WHEN "-" THEN DO:
+            SELF:LABEL = "+".  
             
-            RUN resize_frame(SELF:FRAME, SELF:ROW, shift).
+            IF VALID-HANDLE(hChild) THEN DO:
+                hChild:HIDDEN = TRUE.
+                shift = - hChild:HEIGHT.
+                RUN resize_frame(SELF:FRAME, SELF:ROW, shift).
+                END.
             END.
-        END.
-    END CASE.
+        END CASE.
 END PROCEDURE. 
+
+
+PROCEDURE show_childs:
+ /* Создает кнопки во фрейме hFrame для прямых потомков classf с id =id_
+    первый элемент BUTTON:PRIVATE-DATA  - id соответствующего classf 
+    возвращает количество созданных кнопок в i*/
+    
+    DEFINE OUTPUT PARAMETER hFrame AS HANDLE.
+    DEFINE OUTPUT PARAMETER i AS INTEGER INITIAL 0.
+   
+    DEFINE VARIABLE  id_ AS INTEGER.
+    DEFINE VARIABLE  hBtn AS WIDGET-HANDLE.
+    DEFINE VARIABLE hParent AS WIDGET-HANDLE.
+
+    id_ = integer(entry(1,SELF:PRIVATE-DATA)).
+    
+    hParent = SELF:FRAME.
+
+
+    CREATE FRAME hFrame ASSIGN
+        FRAME = SELF:FRAME
+        OVERLAY =TRUE
+        HIDDEN = TRUE
+        /* BOX = FALSE */
+        SCROLLABLE = FALSE
+        COL = {&w_kat_in}.
+
+ 
+ 
+    FOR EACH classf WHERE parent_id = id_ NO-LOCK:
+        
+        
+        CREATE BUTTON hBtn NO-ERROR ASSIGN 
+            LABEL = "+"
+            FRAME = hFrame
+            ROW = i + 1 
+            COL = 1
+            WIDTH = 4
+            SENSITIVE = TRUE
+            PRIVATE-DATA =  STRING(id) + ","
+            TRIGGERS:
+                ON CHOOSE PERSISTENT RUN show_sub_classf IN THIS-PROCEDURE.
+                END TRIGGERS.
+
+        CREATE BUTTON hBtn  NO-ERROR ASSIGN 
+            LABEL =STRING(id) + "  " +  NAME 
+            FRAME = hFrame
+            ROW = i + 1 
+            COL = 5
+            WIDTH = {&w_btn}
+            SENSITIVE = TRUE
+            PRIVATE-DATA = STRING(id)
+            TRIGGERS:
+                ON CHOOSE PERSISTENT RUN show_katalog IN THIS-PROCEDURE.
+                END TRIGGERS.
+        i = i + 1.
+        END.
+      
+    IF i > 0 THEN DO:   
+          i = i + 1.
+        SELF:PRIVATE-DATA = STRING(id_) + "," + STRING(hFrame).
+ 
+        hFrame:WIDTH = hParent:WIDTH - hFrame:COL  NO-ERROR .
+        hFrame:ROW = self:ROW + 1  NO-ERROR .
+        hFrame:HEIGHT = i   NO-ERROR .
+        END.
+    ELSE DO:
+        SELF:PRIVATE-DATA = STRING( id_) + "," + STRING(0).
+        DELETE WIDGET hFrame.
+        END.
+            
+END PROCEDURE.
 
 
 PROCEDURE resize_frame.
@@ -291,46 +356,3 @@ PROCEDURE resize_frame.
     IF hFrame <> FRAME kat:HANDLE THEN  hFrame:HEIGHT-CHARS = hFrame:HEIGHT-CHARS + shift.
 END PROCEDURE.
 
-
-
-PROCEDURE show_childs:
- /* Создает кнопки во фрейме hFrame для прямых потомков classf с id =id_
-    первый элемент BUTTON:PRIVATE-DATA  - id соответствующего classf 
-    возвращает количество созданных кнопок в i*/
-    DEFINE INPUT PARAMETER id_ AS INTEGER.
-    DEFINE INPUT PARAMETER hFrame AS WIDGET-HANDLE.
-    DEFINE OUTPUT PARAMETER i AS INTEGER INITIAL 0.
-   
-    DEFINE VARIABLE  hBtn AS WIDGET-HANDLE.
- 
-    i = 1.
-    FOR EACH classf WHERE parent_id = id_ NO-LOCK:
-        
-        i = i + 1.
-        CREATE BUTTON hBtn ASSIGN 
-            LABEL = "+"
-            FRAME = hFrame
-            ROW = i + 1 
-            COL = 1
-            WIDTH = 4
-            SENSITIVE = TRUE
-            PRIVATE-DATA =  STRING(id) + ","
-            TRIGGERS:
-                ON CHOOSE PERSISTENT RUN show_sub_classf IN THIS-PROCEDURE.
-                END TRIGGERS.
-
-        CREATE BUTTON hBtn ASSIGN 
-            LABEL =STRING(id) + "  " +  NAME 
-            FRAME = hFrame
-            ROW = i  + 1 
-            COL = 5
-            WIDTH = {&w_btn}
-            SENSITIVE = TRUE
-            PRIVATE-DATA = STRING(id)
-            TRIGGERS:
-                ON CHOOSE PERSISTENT RUN show_katalog IN THIS-PROCEDURE.
-                END TRIGGERS.
-
-        END.
-        i = i + 1.    
-END PROCEDURE.
