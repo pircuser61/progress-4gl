@@ -1,39 +1,52 @@
-&SCOPED-DEFINE h_ 24 /*высота окна */
-&SCOPED-DEFINE w_ 240/*ширина окна */
+&SCOPED-DEFINE h_ 22 /*высота окна */
+&SCOPED-DEFINE w_ 220/*ширина окна */
 &SCOPED-DEFINE w_kat 70 /*ширина дерева */
 &SCOPED-DEFINE h_kat 120 /*начальна€ высота  дерева (дл€ инициализации field-group)*/
-&SCOPED-DEFINE w_btn 50 /*ширина кнопки дерева */
+&SCOPED-DEFINE w_btn 40 /*ширина кнопки дерева */
 &SCOPED-DEFINE w_kat_in 4 /*ширина отступа в дереве */
-&SCOPED-DEFINE w_data 165 /*  ширина BROWSE*/
+&SCOPED-DEFINE w_data 140 /*  ширина BROWSE*/
 
+&SCOPED-DEFINE query_string  "FOR EACH katalog_of_classf " /* запрос к временной таблице */
 
-
-/* work table */
-DEFINE WORK-TABLE katalog_of_classf LIKE katalog.
-
-/* QUERY  */ 
+/* temptable */
+DEFINE TEMP-TABLE katalog_of_classf LIKE katalog.
+ 
+/* QUERY  & var*/ 
 DEFINE QUERY q_katalog FOR katalog_of_classf.
+
+DEFINE VARIABLE sort_string AS CHARACTER.
+DEFINE VARIABLE filter_string AS CHARACTER.
  
 /* WIDGETS & var */
 DEFINE BUTTON btn_root LABEL "+".
 DEFINE BUTTON btn_root_text LABEL "Ѕез категории" SIZE {&w_btn} BY 1.
 DEFINE BUTTON btn_exit LABEL "¬ыход".
 DEFINE BUTTON btn_filter LABEL "‘ильтры".
-DEFINE VARIABLE show_sub AS LOGICAL VIEW-AS TOGGLE-BOX 
-    INITIAL TRUE LABEL "ќтображать содержимое подкатегорий".
+
+DEFINE VARIABLE filter_name AS CHARACTER LABEL "Ќазвание".
+DEFINE VARIABLE filter_artic AS CHARACTER LABEL "јртикул".
+DEFINE VARIABLE filter_cod_firm AS CHARACTER  LABEL " од поставщика".
+
+ 
+DEFINE VARIABLE filter_apply  AS LOGICAL VIEW-AS TOGGLE-BOX 
+    INITIAL TRUE LABEL "ѕрименить фильтры".
 
 DEFINE BROWSE b_katalog QUERY q_katalog  
     DISPLAY  artic NAME  cod_good  cod_firm  
     ENABLE artic NAME  cod_good   
-    WITH 24 DOWN  WIDTH {&w_data}  SEPARATORS.
+    WITH 20 DOWN  WIDTH {&w_data}  SEPARATORS.
 
 /* frames */
 DEFINE FRAME main 
+    filter_name NO-LABEL
+    filter_artic NO-LABEL
+    filter_cod_firm NO-LABEL
     b_katalog 
     btn_exit 
     show_sub
-    btn_filter
-    WITH   WIDTH {&w_}.
+   
+    filter_apply
+    WITH   WIDTH {&w_} .
 DEFINE FRAME kat
     btn_root
     btn_root_text
@@ -41,8 +54,8 @@ DEFINE FRAME kat
 
 /* init ui */
 ASSIGN
-    DEFAULT-WINDOW:WIDTH ={&w_}
-    DEFAULT-WINDOW:HEIGHT = {&h_}
+    DEFAULT-WINDOW:WIDTH ={&w_} + 10
+    DEFAULT-WINDOW:HEIGHT = {&h_} + 2
     
     FRAME main:HEIGHT = {&h_}
     FRAME main:WIDTH = {&w_}
@@ -51,14 +64,15 @@ ASSIGN
     FRAME kat:WIDTH = {&w_kat}
     FRAME kat:HEIGHT = {&h_kat}
  
-    b_katalog:COL = {&w_kat} + 2
+   
     btn_exit:COL =  {&w_} - 10      
     btn_exit:ROW =  {&h_} - 1
 
-    btn_filter:COL =  {&w_kat} + 4       
-    btn_filter:ROW =  {&h_} - 1 
 
-    show_sub:COL =  {&w_kat} + 24     
+    
+    b_katalog:COL = {&w_kat} + 2
+    b_katalog:ROW = 2
+    show_sub:COL =  {&w_kat} + 34     
     show_sub:ROW =  {&h_} - 1 
 
     artic:READ-ONLY IN BROWSE b_katalog = TRUE
@@ -68,10 +82,17 @@ ASSIGN
     btn_root:COL = 1
     btn_root:ROW = 1
     btn_root_text:COL = 4
-    btn_root_text:ROW = 1.
+    btn_root_text:ROW = 1
 
+
+    filter_artic:COL = {&w_kat} + 2
+    filter_name:COL = {&w_kat} + 20
+
+    filter_cod_firm:COL = {&w_kat} + 40
+    filter_apply:ROW = 1
+    filter_apply:COL =  {&w_kat} + 60.       
  
- /* triggers */
+/* triggers */
 
 btn_root:PRIVATE-DATA =  STRING(0) + ",".
 ON CHOOSE OF btn_root IN FRAME kat PERSISTENT RUN show_sub_classf IN THIS-PROCEDURE.
@@ -81,59 +102,72 @@ btn_root_text:PRIVATE-DATA = STRING(0).
 ON CHOOSE OF btn_root_text IN  FRAME kat PERSISTENT RUN show_katalog IN THIS-PROCEDURE.
             
 
+ON VALUE-CHANGED OF filter_apply IN FRAME main DO:
+    /* фильтраци€ */
+    /* если выбран чекбокс, формирует и добавл€ет строку фильтрации к запросу к katalog_of_classf*/
+    filter_string = "".
+    IF filter_apply:CHECKED THEN DO:
+        ASSIGN  filter_name.
+        ASSIGN filter_artic.
+        ASSIGN filter_cod_firm.
+         
+        IF "" <> filter_name  THEN 
+            filter_string = filter_string + "  name  matches (""*" +  filter_name  + "*"") and".
+        IF "" <> filter_artic  THEN 
+            filter_string = filter_string + "  artic  matches (""*" +  filter_artic  + "*"") and".
+        IF "" <>  filter_cod_firm  THEN DO:
+            filter_string = filter_string + "  cod_firm = " + string(integer(filter_cod_firm)) + " and" NO-ERROR.
+            IF  ERROR-STATUS:ERROR THEN DO:
+                MESSAGE " од производител€ должен быть целым числом"
+                     VIEW-AS ALERT-BOX INFORMATION BUTTON OK.
+                RETURN.
+                END.
+            END.
+        DEFINE VARIABLE len AS INTEGER.
+        len = LENGTH(filter_string).
+        IF len > 0 THEN filter_string = " where " +  substring(filter_string,1,len - 3). /* отсекаем последний and и добал€км where */
+        END.
+
+    QUERY q_katalog:QUERY-CLOSE(). 
+    QUERY q_katalog:QUERY-PREPARE({&query_string} + filter_string + sort_string). 
+    QUERY q_katalog:QUERY-OPEN(). 
+    END.
+
+
 ON START-SEARCH OF b_katalog DO:
-    /* сортировка при клике на колонке BROWSE */
+    /* сортировка */
+    /* если PRIVATE-DATA колнки пуста€ строка - по возрастанию*/
+    /* при клике на колонке BROWSE , формирует и добавл€ет строку сортировки к запросу к katalog_of_classf*/
+    
     DEFINE VARIABLE h_col  AS WIDGET-HANDLE.
     h_col = BROWSE b_katalog:CURRENT-COLUMN.
 
-    IF h_col:PRIVATE-DATA = "" THEN DO: /* по возрастанию */
+    sort_string = " by " + h_col:NAME.
+    IF NOT h_col:PRIVATE-DATA = "" THEN  DO: /* по убыванию*/
+        sort_string  =  sort_string  + " DESCENDING".
         h_col:PRIVATE-DATA  = "1".
-        CASE h_col:NAME:
-            WHEN "name" THEN OPEN QUERY q_katalog FOR 
-                EACH katalog_of_classf BY NAME.
-            WHEN "artic" THEN OPEN QUERY q_katalog FOR 
-                EACH katalog_of_classf BY artic.     
-            WHEN "cod_good" THEN OPEN QUERY q_katalog FOR 
-                EACH katalog_of_classf BY cod_good.
-            END CASE.
         END.
+    ELSE h_col:PRIVATE-DATA  = "".
 
-    ELSE DO:
-        h_col:PRIVATE-DATA  = "".
-        CASE h_col:NAME:
-            WHEN "name" THEN OPEN QUERY q_katalog FOR 
-                EACH katalog_of_classf BY NAME DESCENDING.
-            WHEN "artic" THEN OPEN QUERY q_katalog FOR 
-                EACH katalog_of_classf BY artic DESCENDING.     
-            WHEN "cod_good" THEN OPEN QUERY q_katalog FOR 
-                EACH katalog_of_classf BY cod_good DESCENDING.
-            END CASE.
-        END.
-
-/* краш без сообщений
-  DEFINE VARIABLE h_col  AS WIDGET-HANDLE.
-  DEFINE VARIABLE h_query AS HANDLE.
-
-  h_col = BROWSE b_katalog:CURRENT-COLUMN.
-  h_query  = BROWSE b_katalog:QUERY.    
-  h_query:QUERY-CLOSE(). 
-  h_query:QUERY-PREPARE("FOR EACH katalog_of_classf").
-  h_query:QUERY-OPEN(). 
-  */
- 
+    QUERY q_katalog:QUERY-CLOSE(). 
+    QUERY q_katalog:QUERY-PREPARE({&query_string} + filter_string + sort_string).
+    QUERY q_katalog:QUERY-OPEN(). 
 END.
 
   
 
 VIEW FRAME MAIN.
-
-    
 ENABLE ALL WITH FRAME kat.
 ENABLE ALL WITH FRAME main.
+APPLY "choose" TO btn_root IN FRAME kat.
+
 WAIT-FOR CHOOSE OF btn_exit.
 
 
 /*functions */
+
+
+
 PROCEDURE get_katalog_by_classf.
      /* список товаров заданного каталога*/
     DEFINE INPUT PARAMETER id_ AS INTEGER.
@@ -158,9 +192,11 @@ PROCEDURE get_katalog_by_classf_list.
         DELETE katalog_of_classf.
         END.
   
-    DO i = 1 TO NUM-ENTRIES(list):
-       IF  i = 0 OR i > 6 THEN RETURN.
-
+    DO i = 1 TO NUM-ENTRIES(list) - 1: /* спиское заканчиваетс€ зап€той,
+                                       последний элемнт - пуста€ строка*/
+                                           
+      /* IF  i > 12 THEN RETURN. */
+     
        id_ = INTEGER( ENTRY( i, list )).
     
 
@@ -179,14 +215,17 @@ PROCEDURE show_katalog.
 
     classf_id = integer(ENTRY(1,SELF:PRIVATE-DATA)).
     IF show_sub:CHECKED IN FRAME main THEN DO:
+        IF classf_id = 0  THEN RETURN.
         DEFINE VARIABLE res AS CHARACTER.
         RUN classf_items(classf_id, INPUT-OUTPUT   res).
         RUN get_katalog_by_classf_list(res).
-    END.
+        END.
         
     ELSE RUN get_katalog_by_classf(classf_id).
         
-    OPEN QUERY q_katalog FOR EACH katalog_of_classf. 
+    QUERY q_katalog:QUERY-CLOSE(). 
+    QUERY q_katalog:QUERY-PREPARE({&query_string} + filter_string + sort_string). 
+    QUERY q_katalog:QUERY-OPEN(). 
 END PROCEDURE.
 
 
